@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Filosofía en el Espacio</title>
+<style>
+  :root { --w: 800px; --h: 450px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#000;color:#fff;font-family:system-ui,sans-serif;height:100vh}
+  h1{margin:6px 0;font-size:1.2rem}
+  #hud{display:flex;gap:1rem;margin-top:4px}
+  #btnRestart{margin:4px auto 8px;padding:4px 12px;border:none;border-radius:6px;background:#0a84ff;color:#fff;font-weight:600;cursor:pointer;display:none}
+  #btnRestart:hover{opacity:.85}
+  canvas{background:#030b17;border:2px solid #0a84ff;border-radius:8px}
+</style>
+</head>
+<body>
+  <h1>✨ Filosofía en el Espacio ✨</h1>
+  <div id="hud"><span id="lives"></span><span id="score"></span></div>
+  <button id="btnRestart">Reiniciar juego</button>
+  <canvas id="game" width="800" height="450"></canvas>
+
+<script>
+//--------------------------------------------------
+// Datos de juego
+//--------------------------------------------------
+const philosopherQuotes=[
+  "Sólo sé que no sé nada.",
+  "Pienso, luego existo.",
+  "El hombre es la medida de todas las cosas.",
+  "Lo que no me mata me hace más fuerte.",
+  "La felicidad es el significado y propósito de la vida."],
+ popQuotes=[
+  "Hasta el infinito y más allá!",
+  "Hakuna Matata",
+  "Con gran poder viene gran responsabilidad",
+  "Todo es increíble!",
+  "Que la fuerza te acompañe"];
+const quizPool=[
+  {quote:"La vida sin examen no merece ser vivida",author:"Sócrates",opts:["Platón","Aristóteles","Sócrates","Heráclito"]},
+  {quote:"Dios ha muerto. Dios sigue muerto. Y nosotros lo hemos matado.",author:"Friedrich Nietzsche",opts:["Kant","Nietzsche","Descartes","Hegel"]},
+  {quote:"El hombre está condenado a ser libre",author:"Jean‑Paul Sartre",opts:["Epicuro","Camus","Sartre","Spinoza"]}
+];
+//--------------------------------------------------
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+//--------------------------------------------------
+// Estado e inicialización
+//--------------------------------------------------
+let lives,score,level,falling=[],keys={},gameOver=false,quizIndex=0,errors=0;
+const MAX_LIVES=3,GOAL=15,MAX_ERRORS=2;
+
+document.addEventListener('keydown',e=>keys[e.code]=true);
+document.addEventListener('keyup',e=>keys[e.code]=false);
+const btnRestart=document.getElementById('btnRestart');
+btnRestart.addEventListener('click',()=>initGame());
+
+function initGame(){
+  lives=MAX_LIVES;
+  score=0;
+  level=1;
+  falling=[];
+  player.x=W/2-25;
+  player.y=H-60;
+  quizIndex=0;
+  errors=0;
+  gameOver=false;
+  btnRestart.style.display='none';
+  loop();
+}
+//--------------------------------------------------
+// Jugador
+//--------------------------------------------------
+const player={x:W/2-25,y:H-60,w:50,h:50,vy:0,onGround:true};
+//--------------------------------------------------
+function spawnQuote(){
+  const text=Math.random()<0.6?philosopherQuotes[Math.floor(Math.random()*philosopherQuotes.length)]:popQuotes[Math.floor(Math.random()*popQuotes.length)];
+  falling.push({x:Math.random()*(W-120)+60,y:-30,w:140,h:30,vy:2+Math.random()*1.5,text,isGood:philosopherQuotes.includes(text)}); // velocidad 2‑3.5 px/frame (más lenta)
+}
+let spawnTimer=0;
+//--------------------------------------------------
+function update(){
+  if(level===1){
+    // controles
+    if(keys['ArrowLeft'])player.x-=4;
+    if(keys['ArrowRight'])player.x+=4;
+    if(keys['Space']&&player.onGround){player.vy=-9;player.onGround=false;}
+
+    player.vy+=0.5; // gravedad
+    player.y+=player.vy;
+    if(player.y+player.h>=H-10){player.y=H-10-player.h;player.vy=0;player.onGround=true;}
+
+    // mantener dentro
+    player.x=Math.max(0,Math.min(W-player.w,player.x));
+
+    // generar frases
+    spawnTimer++;
+    if(spawnTimer>45){ // cada 45 frames ≈ 0.75 s a 60fps
+      spawnTimer=0;spawnQuote();
+    }
+    // mover frases
+    for(let i=falling.length-1;i>=0;i--){
+      const f=falling[i];f.y+=f.vy;
+      // colisión
+      if(AABB(f,player)){
+        if(f.isGood){score++;}
+        else{lives--;}
+        falling.splice(i,1);
+      }else if(f.y>H+50){falling.splice(i,1);} // fuera
+    }
+    if(score>=GOAL){level=2;}
+    if(lives<=0){gameOver=true;}
+  }else if(level===2){ /* quiz handled via click */ }
+}
+//--------------------------------------------------
+function AABB(a,b){return a.x<a.w+b.x&&a.x+a.w>b.x&&a.y<a.h+b.y&&a.y+a.h>b.y;}
+//--------------------------------------------------
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // fondo estrellas móviles
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  for(let i=0;i<90;i++)ctx.fillRect(Math.random()*W,Math.random()*H,1,1);
+  // jugador
+  ctx.fillStyle='#0a84ff';
+  ctx.fillRect(player.x,player.y,player.w,player.h);
+  // frases
+  ctx.font='14px sans-serif';
+  ctx.textAlign='center';
+  for(const f of falling){
+    ctx.fillStyle='#13c6f3'; // mismo color para todos
+    ctx.fillRect(f.x,f.y,f.w,f.h);
+    ctx.fillStyle='#000';
+    ctx.fillText(f.text.slice(0,20)+'...',f.x+f.w/2,f.y+20);
+  }
+  // HUD
+  document.getElementById('lives').textContent='❤️ '.repeat(lives);
+  document.getElementById('score').textContent=`Frases: ${score}/${GOAL}`;
+
+  if(level===2){drawQuiz();}
+  if(gameOver){drawGameOver();}
+}
+//--------------------------------------------------
+function drawQuiz(){
+  const q=quizPool[quizIndex];
+  ctx.fillStyle='rgba(0,0,0,0.75)';
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#fff';
+  ctx.textAlign='center';
+  ctx.font='20px sans-serif';
+  ctx.fillText('¿Quién dijo?',W/2,60);
+  ctx.font='18px italic';
+  wrapText(q.quote, W/2,100,600,24);
+  ctx.font='16px sans-serif';
+  q.opts.forEach((op,i)=>{
+    ctx.fillStyle='#0a84ff';
+    ctx.fillRect(W/2-150,160+i*50,300,40);
+    ctx.fillStyle='#fff';
+    ctx.fillText(op,W/2,185+i*50);
+  });
+}
+//--------------------------------------------------
+function wrapText(txt,x,y,maxWidth,lineHeight){
+  const words=txt.split(' ');
+  let line='',ty=y;
+  for(const w of words){
+    const test=line+w+' ';
+    if(ctx.measureText(test).width>maxWidth){ctx.fillText(line,x,ty);line=w+' ';ty+=lineHeight;}
+    else line=test;
+  }
+  ctx.fillText(line,x,ty);
+}
+//--------------------------------------------------
+canvas.addEventListener('click',e=>{
+  if(level!==2||gameOver)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const q=quizPool[quizIndex];
+  q.opts.forEach((op,i)=>{
+    const bx=W/2-150,by=160+i*50,bw=300,bh=40;
+    if(mx>bx&&mx<bx+bw&&my>by&&my<by+bh){
+      if(op===q.author){quizIndex++;}
+      else{errors++;}
+    }
+  });
+  if(quizIndex>=3){gameOver=true;}
+  if(errors>MAX_ERRORS){gameOver=true;}
+});
+//--------------------------------------------------
+function drawGameOver(){
+  ctx.fillStyle='rgba(0,0,0,0.8)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px sans-serif';
+  ctx.fillText(errors>MAX_ERRORS||lives<=0?'Fin del juego':'¡Victoria!',W/2,H/2-20);
+  ctx.font='18px sans-serif';ctx.fillText('Pulsa el botón para reiniciar',W/2,H/2+20);
+  btnRestart.style.display='block';
+}
+//--------------------------------------------------
+function loop(){
+  if(gameOver)return; // detenido hasta reinicio
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+//--------------------------------------------------
+initGame();
+</script>
+</body>
+</html>
